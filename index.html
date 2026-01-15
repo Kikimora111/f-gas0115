@@ -2,227 +2,289 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>F-gas 历史排放数据可视化</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>含氟气体历史排放数据库</title>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+    
     <style>
-        body { font-family: 'Segoe UI', Roboto, sans-serif; max-width: 1000px; margin: 0 auto; padding: 20px; }
-        h1 { text-align: center; color: #333; margin-bottom: 30px; }
-        
-        /* 控制面板样式升级：支持双重筛选 */
-        .controls {
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 8px;
+        /* --- CSS 变量定义配色方案 --- */
+        :root {
+            --primary-color: #2c7be5;   /* 主色调：专业蓝 */
+            --secondary-color: #1a4d8c; /* 深蓝色 */
+            --accent-color: #00d97e;    /* 点缀色：清新绿 */
+            --bg-light: #f4f7f9;        /* 网页背景灰 */
+            --text-dark: #2d3748;       /* 深色文字 */
+            --text-gray: #718096;       /* 灰色文字 */
+            --card-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); /* 卡片阴影 */
+        }
+
+        /* --- 全局样式重置 --- */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-light);
+            color: var(--text-dark);
+            line-height: 1.6;
+        }
+
+        /* --- 1. 头部 Header (Hero Section) --- */
+        .site-header {
+            /* 渐变背景 */
+            background: linear-gradient(135deg, var(--secondary-color), var(--primary-color));
+            color: white;
+            padding: 40px 20px;
+            text-align: center;
+            margin-bottom: -60px; /* 让下方的卡片向上重叠，制造层次感 */
+            padding-bottom: 80px;
+        }
+        .site-title {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+            letter-spacing: 1px;
+        }
+        .site-subtitle {
+            font-size: 1.1rem;
+            opacity: 0.9;
+            font-weight: 300;
+        }
+
+        /* --- 主内容容器 --- */
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        /* --- 2. 卡片式布局核心 --- */
+        .dashboard-card {
+            background: white;
+            border-radius: 16px;
+            box-shadow: var(--card-shadow);
+            padding: 30px;
+            margin-bottom: 40px;
+            position: relative; /* 为了配合 header 的负边距 */
+        }
+
+        /* --- 3. 控制面板样式升级 --- */
+        .controls-header {
+            text-align: center;
+            margin-bottom: 25px;
+            color: var(--text-gray);
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.9em;
+            letter-spacing: 1px;
+        }
+        .controls-container {
             display: flex;
             justify-content: center;
             align-items: center;
-            gap: 30px; /* 两个选框之间的距离 */
-            margin-bottom: 20px;
-            border: 1px solid #e9ecef;
-            flex-wrap: wrap; /* 手机端自动换行 */
+            gap: 40px; /* 控件间距 */
+            margin-bottom: 30px;
+            padding-bottom: 30px;
+            border-bottom: 1px solid #eee; /* 分隔线 */
+            flex-wrap: wrap;
         }
         .control-group {
             display: flex;
             flex-direction: column;
-            gap: 5px;
+            gap: 8px;
+            min-width: 220px;
         }
         .control-group label {
-            font-size: 0.9em;
-            font-weight: bold;
-            color: #555;
+            font-size: 0.95em;
+            font-weight: 700;
+            color: var(--text-dark);
+            display: flex;
+            align-items: center;
         }
+        /* 在标签前加一个小图标装饰 */
+        .control-group label::before {
+            content: '';
+            display: inline-block;
+            width: 4px; height: 16px;
+            background-color: var(--primary-color);
+            margin-right: 8px;
+            border-radius: 2px;
+        }
+        /* 美化下拉框 */
         select {
-            padding: 8px 12px;
+            padding: 12px 16px;
             font-size: 16px;
-            border-radius: 4px;
-            border: 1px solid #ced4da;
-            min-width: 180px;
+            border-radius: 10px;
+            border: 2px solid #e2e8f0;
+            background-color: #f8fafc;
+            color: var(--text-dark);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            appearance: none; /* 移除原生样式，方便自定义箭头(这里简化处理未加自定义箭头图片) */
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%232c7be5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            background-size: 18px;
+            padding-right: 40px;
         }
-        
-        #chart-container { width: 100%; height: 600px; border: 1px solid #ddd; border-radius: 4px; }
-        .footer { text-align: center; margin-top: 20px; color: #666; font-size: 0.9em; }
+        select:hover { border-color: var(--primary-color); }
+        select:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(44, 123, 229, 0.2);
+        }
+
+        /* --- 图表容器 --- */
+        #chart-container {
+            width: 100%;
+            height: 600px;
+            /* 移除旧边框，因为现在在卡片里了 */
+        }
+
+        /* --- 页脚 --- */
+        .footer {
+            text-align: center;
+            padding: 20px 0;
+            color: var(--text-gray);
+            font-size: 0.9em;
+            border-top: 1px solid #eee;
+            margin-top: 20px;
+        }
+        .download-link {
+            color: var(--primary-color);
+            text-decoration: none;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            transition: color 0.2s;
+        }
+        .download-link:hover { color: var(--secondary-color); }
     </style>
 </head>
 <body>
 
-    <h1>🌍 F-gas 多源区域排放数据对比</h1>
-
-    <div class="controls">
-        <div class="control-group">
-            <label for="region-select">1. 选择区域 (Region)</label>
-            <select id="region-select">
-                <option value="">加载中...</option>
-            </select>
+    <header class="site-header">
+        <div class="container">
+            <h1 class="site-title">含氟气体历史排放数据库</h1>
+            <p class="site-subtitle">全球/区域多源数据交互式可视化分析平台</p>
         </div>
+    </header>
 
-        <div class="control-group">
-            <label for="substance-select">2. 选择物质 (Substance)</label>
-            <select id="substance-select">
-                <option value="">加载中...</option>
-            </select>
-        </div>
-    </div>
+    <main class="container">
+        <section class="dashboard-card">
+            
+            <div class="controls-header">—— 数据筛选控制器 ——</div>
 
-    <div id="chart-container"></div>
+            <div class="controls-container">
+                <div class="control-group">
+                    <label for="region-select">第一步：选择区域 (Region)</label>
+                    <select id="region-select">
+                        <option value="">正在加载区域数据...</option>
+                    </select>
+                </div>
 
-    <div class="footer">
-        数据来源：多源对比分析 | <a href="data.csv" download>📥 下载源数据</a>
-    </div>
+                <div class="control-group">
+                    <label for="substance-select">第二步：选择物质 (Substance)</label>
+                    <select id="substance-select">
+                        <option value="">正在加载物质列表...</option>
+                    </select>
+                </div>
+            </div>
+
+            <div id="chart-container"></div>
+
+            <footer class="footer">
+                © 2026 含氟气体数据库计划 | 数据来源：多源公开数据库整理 | 
+                <a href="data.csv" download class="download-link">
+                    <span style="margin-right: 5px; font-size: 1.2em;">📥</span> 下载源数据 (CSV)
+                </a>
+            </footer>
+        </section>
+    </main>
 
     <script>
         var myChart = echarts.init(document.getElementById('chart-container'));
-        var globalData = []; // 存储完整数据
-        var distinctYears = []; // 存储所有年份
+        var globalData = []; var distinctYears = [];
+        myChart.showLoading({ text: '数据库连接中...', color: '#2c7be5', textColor: '#2c7be5', maskColor: 'rgba(255, 255, 255, 0.9)' });
 
-        myChart.showLoading();
-
-        // 读取 data.csv (带时间戳防缓存)
         Papa.parse("data.csv?t=" + new Date().getTime(), {
-            download: true,
-            header: true,
-            dynamicTyping: true,
-            skipEmptyLines: true,
+            download: true, header: true, dynamicTyping: true, skipEmptyLines: true,
             complete: function(results) {
                 myChart.hideLoading();
-
-                // --- 1. 数据清洗 (关键步骤：去空格、去隐形字符) ---
                 var rawData = results.data;
-                // 清洗表头，防止 Excel 带来的 BOM 问题
-                var columns = results.meta.fields.map(function(col) {
-                    return col.trim().replace(/^\ufeff/, '');
-                });
-
-                // 简单的容错：如果表头被清洗了，也要把数据里的 key 对应改过来
+                var columns = results.meta.fields.map(function(col) { return col.trim().replace(/^\ufeff/, ''); });
                 if (results.meta.fields[0] !== columns[0]) {
-                    rawData = rawData.map(row => {
-                        var newRow = {};
-                        results.meta.fields.forEach((oldKey, index) => {
-                            newRow[columns[index]] = row[oldKey];
-                        });
-                        return newRow;
-                    });
+                    rawData = rawData.map(row => { var newRow = {}; results.meta.fields.forEach((oldKey, i) => newRow[columns[i]] = row[oldKey]); return newRow; });
                 }
-
-                // --- 2. 检查必须包含的列 ---
-                if (!columns.includes("Source") || !columns.includes("Year") || !columns.includes("Region")) {
-                    alert("CSV格式错误！必须包含 'Year', 'Region', 'Source' 三列 (注意首字母大写)。");
-                    return;
-                }
-
-                // --- 3. 提取筛选选项 ---
+                if (!columns.includes("Source") || !columns.includes("Year") || !columns.includes("Region")) { alert("CSV格式错误！"); return; }
                 globalData = rawData;
-
-                // A. 提取所有年份 (X轴)
                 var yearsSet = new Set(rawData.map(row => row.Year));
                 distinctYears = Array.from(yearsSet).sort((a, b) => a - b);
-
-                // B. 提取所有物质 (排除固定列)
                 var substances = columns.filter(col => col !== "Year" && col !== "Source" && col !== "Region");
-
-                // --- 4. 初始化下拉菜单 ---
                 initSelectors(substances);
             },
-            error: function(err) {
-                alert("无法读取 data.csv，请检查文件是否上传。");
-            }
+            error: function(err) { alert("无法读取 data.csv。"); }
         });
 
-        // 初始化选择器逻辑
         function initSelectors(substances) {
             var regionSelect = document.getElementById('region-select');
             var substanceSelect = document.getElementById('substance-select');
-
-            // 1. 填充区域下拉框 (自动去重)
             var regions = Array.from(new Set(globalData.map(row => row.Region))).sort();
             regionSelect.innerHTML = "";
-            regions.forEach(r => {
-                var opt = document.createElement("option");
-                opt.value = r;
-                opt.text = r;
-                regionSelect.appendChild(opt);
-            });
-
-            // 2. 填充物质下拉框
+            regions.forEach(r => { var opt = document.createElement("option"); opt.value = r; opt.text = r; regionSelect.appendChild(opt); });
             substanceSelect.innerHTML = "";
-            substances.forEach(s => {
-                var opt = document.createElement("option");
-                opt.value = s;
-                opt.text = s;
-                substanceSelect.appendChild(opt);
-            });
-
-            // 3. 绑定点击事件：当任何一个变化时，更新图表
+            substances.forEach(s => { var opt = document.createElement("option"); opt.value = s; opt.text = s; substanceSelect.appendChild(opt); });
             regionSelect.addEventListener('change', updateChart);
             substanceSelect.addEventListener('change', updateChart);
-
-            // 4. 初始显示第一张图
             updateChart(); 
         }
 
-        // 核心更新函数
         function updateChart() {
             var selectedRegion = document.getElementById('region-select').value;
             var selectedSubstance = document.getElementById('substance-select').value;
-
             if (!selectedRegion || !selectedSubstance) return;
-
-            // --- 步骤 A: 筛选出该区域的数据 ---
             var regionData = globalData.filter(row => row.Region === selectedRegion);
-
-            // --- 步骤 B: 在该区域下，有哪些来源 (Source) ---
             var sources = Array.from(new Set(regionData.map(row => row.Source)));
-
-            // --- 步骤 C: 构建线条数据 ---
             var seriesData = sources.map(sourceName => {
-                // 找出该 Source 的所有行
                 var sourceRows = regionData.filter(row => row.Source === sourceName);
-                
-                // 对齐年份数据
                 var dataPoints = distinctYears.map(year => {
                     var row = sourceRows.find(r => r.Year === year);
                     return row ? row[selectedSubstance] : null;
                 });
-
                 return {
-                    name: sourceName, // 图例显示来源名 (如 EDGAR, EPA)
-                    type: 'line',
-                    smooth: true,
-                    data: dataPoints,
-                    symbolSize: 8
+                    name: sourceName, type: 'line', smooth: true, data: dataPoints, symbolSize: 10, lineStyle: { width: 3 }
                 };
             });
 
-            // --- 步骤 D: 设置图表 ---
+            // 更新了图表配置的样式，使其更匹配新主题
             var option = {
-                title: {
-                    text: selectedRegion + ' - ' + selectedSubstance + ' 排放对比',
-                    left: 'center',
-                    top: 10
+                // 标题移除了，因为页面顶部已经有了大标题
+                tooltip: { 
+                    trigger: 'axis',
+                    backgroundColor: 'rgba(255,255,255,0.95)',
+                    borderColor: '#eee',
+                    borderWidth: 1,
+                    textStyle: { color: '#333' },
+                    axisPointer: { lineStyle: { color: '#999' } }
                 },
-                tooltip: { trigger: 'axis' },
-                legend: {
-                    data: sources, 
-                    bottom: 0,
-                    padding: 20
+                legend: { data: sources, bottom: 0, padding: 20, itemGap: 20, textStyle: { fontSize: 14 } },
+                grid: { left: '5%', right: '5%', bottom: '15%', top: '8%', containLabel: true },
+                xAxis: { 
+                    type: 'category', name: '年份', data: distinctYears,
+                    axisLine: { lineStyle: { color: '#ccc' } },
+                    axisLabel: { color: '#666', fontSize: 13 }
                 },
-                grid: { left: '3%', right: '4%', bottom: '15%', containLabel: true },
-                xAxis: {
-                    type: 'category',
-                    name: '年份',
-                    data: distinctYears
-                },
-                yAxis: {
-                    type: 'value',
-                    name: '排放量 (吨/CO2e)'
+                yAxis: { 
+                    type: 'value', name: '排放量 (吨/CO2e)',
+                    axisLine: { show: false },
+                    axisTick: { show: false },
+                    splitLine: { lineStyle: { color: '#eee', type: 'dashed' } },
+                    nameTextStyle: { color: '#666', padding: [0, 0, 10, 0] }
                 },
                 series: seriesData,
-                color: ['#5470c6', '#91cc75', '#fac858', '#ee6666', '#73c0de']
+                color: ['#2c7be5', '#00d97e', '#f6c23e', '#e74a3b', '#36b9cc'] // 使用了新的配色盘
             };
-
-            myChart.setOption(option, true); // true 代表完全重绘
+            myChart.setOption(option, true);
         }
-
         window.addEventListener('resize', () => myChart.resize());
     </script>
 </body>
