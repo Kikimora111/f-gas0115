@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>F-gas 区域排放数据可视化</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Roboto, sans-serif; max-width: 1000px; margin: 0 auto; padding: 20px; }
+        h1 { text-align: center; color: #333; margin-bottom: 30px; }
+        
+        /* 控制面板样式升级：支持双重筛选 */
+        .controls {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 30px; /* 两个选框之间的距离 */
+            margin-bottom: 20px;
+            border: 1px solid #e9ecef;
+            flex-wrap: wrap; /* 手机端自动换行 */
+        }
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        .control-group label {
+            font-size: 0.9em;
+            font-weight: bold;
+            color: #555;
+        }
+        select {
+            padding: 8px 12px;
+            font-size: 16px;
+            border-radius: 4px;
+            border: 1px solid #ced4da;
+            min-width: 180px;
+        }
+        
+        #chart-container { width: 100%; height: 600px; border: 1px solid #ddd; border-radius: 4px; }
+        .footer { text-align: center; margin-top: 20px; color: #666; font-size: 0.9em; }
+    </style>
+</head>
+<body>
+
+    <h1>🌍 F-gas 多源区域排放数据对比</h1>
+
+    <div class="controls">
+        <div class="control-group">
+            <label for="region-select">1. 选择区域 (Region)</label>
+            <select id="region-select">
+                <option value="">加载中...</option>
+            </select>
+        </div>
+
+        <div class="control-group">
+            <label for="substance-select">2. 选择物质 (Substance)</label>
+            <select id="substance-select">
+                <option value="">加载中...</option>
+            </select>
+        </div>
+    </div>
+
+    <div id="chart-container"></div>
+
+    <div class="footer">
+        数据来源：多源对比分析 | <a href="data.csv" download>📥 下载源数据</a>
+    </div>
+
+    <script>
+        var myChart = echarts.init(document.getElementById('chart-container'));
+        var globalData = []; // 存储完整数据
+        var distinctYears = []; // 存储所有年份
+
+        myChart.showLoading();
+
+        // 读取 data.csv (带时间戳防缓存)
+        Papa.parse("data.csv?t=" + new Date().getTime(), {
+            download: true,
+            header: true,
+            dynamicTyping: true,
+            skipEmptyLines: true,
+            complete: function(results) {
+                myChart.hideLoading();
+
+                // --- 1. 数据清洗 (关键步骤：去空格、去隐形字符) ---
+                var rawData = results.data;
+                // 清洗表头，防止 Excel 带来的 BOM 问题
+                var columns = results.meta.fields.map(function(col) {
+                    return col.trim().replace(/^\ufeff/, '');
+                });
+
+                // 简单的容错：如果表头被清洗了，也要把数据里的 key 对应改过来
+                if (results.meta.fields[0] !== columns[0]) {
+                    rawData = rawData.map(row => {
+                        var newRow = {};
+                        results.meta.fields.forEach((oldKey, index) => {
+                            newRow[columns[index]] = row[oldKey];
+                        });
+                        return newRow;
+                    });
+                }
+
+                // --- 2. 检查必须包含的列 ---
+                if (!columns.includes("Source") || !columns.includes("Year") || !columns.includes("Region")) {
+                    alert("CSV格式错误！必须包含 'Year', 'Region', 'Source' 三列 (注意首字母大写)。");
+                    return;
+                }
+
+                // --- 3. 提取筛选选项 ---
+                globalData = rawData;
+
+                // A. 提取所有年份 (X轴)
+                var yearsSet = new Set(rawData.map(row => row.Year));
+                distinctYears = Array.from(yearsSet).sort((a, b) => a - b);
+
+                // B. 提取所有物质 (排除固定列)
+                var substances = columns.filter(col => col !== "Year" && col !== "Source" && col !== "Region");
+
+                // --- 4. 初始化下拉菜单 ---
+                initSelectors(substances);
+            },
+            error: function(err) {
+                alert("无法读取 data.csv，请检查文件是否上传。");
+            }
+        });
+
+        // 初始化选择器逻辑
+        function initSelectors(substances) {
+            var regionSelect = document.getElementById('region-select');
+            var substanceSelect = document.getElementById('substance-select');
+
+            // 1. 填充区域下拉框 (自动去重)
+            var regions = Array.from(new Set(globalData.map(row => row.Region))).sort();
+            regionSelect.innerHTML = "";
+            regions.forEach(r => {
+                var opt = document.createElement("option");
+                opt.value = r;
+                opt.text = r;
+                regionSelect.appendChild(opt);
+            });
+
+            // 2. 填充物质下拉框
+            substanceSelect.innerHTML = "";
+            substances.forEach(s => {
+                var opt = document.createElement("option");
+                opt.value = s;
+                opt.text = s;
+                substanceSelect.appendChild(opt);
+            });
+
+            // 3. 绑定点击事件：当任何一个变化时，更新图表
+            regionSelect.addEventListener('change', updateChart);
+            substanceSelect.addEventListener('change', updateChart);
+
+            // 4. 初始显示第一张图
+            updateChart(); 
+        }
+
+        // 核心更新函数
+        function updateChart() {
+            var selectedRegion = document.getElementById('region-select').value;
+            var selectedSubstance = document.getElementById('substance-select').value;
+
+            if (!selectedRegion || !selectedSubstance) return;
+
+            // --- 步骤 A: 筛选出该区域的数据 ---
+            var regionData = globalData.filter(row => row.Region === selectedRegion);
+
+            // --- 步骤 B: 在该区域下，有哪些来源 (Source) ---
+            var sources = Array.from(new Set(regionData.map(row => row.Source)));
+
+            // --- 步骤 C: 构建线条数据 ---
+            var seriesData = sources.map(sourceName => {
+                // 找出该 Source 的所有行
+                var sourceRows = regionData.filter(row => row.Source === sourceName);
+                
+                // 对齐年份数据
+                var dataPoints = distinctYears.map(year => {
+                    var row = sourceRows.find(r => r.Year === year);
+                    return row ? row[selectedSubstance] : null;
+                });
+
+                return {
+                    name: sourceName, // 图例显示来源名 (如 EDGAR, EPA)
+                    type: 'line',
+                    smooth: true,
+                    data: dataPoints,
+                    symbolSize: 8
+                };
+            });
+
+            // --- 步骤 D: 设置图表 ---
+            var option = {
+                title: {
+                    text: selectedRegion + ' - ' + selectedSubstance + ' 排放对比',
+                    left: 'center',
+                    top: 10
+                },
+                tooltip: { trigger: 'axis' },
+                legend: {
+                    data: sources, 
+                    bottom: 0,
+                    padding: 20
+                },
+                grid: { left: '3%', right: '4%', bottom: '15%', containLabel: true },
+                xAxis: {
+                    type: 'category',
+                    name: '年份',
+                    data: distinctYears
+                },
+                yAxis: {
+                    type: 'value',
+                    name: '排放量 (吨/CO2e)'
+                },
+                series: seriesData,
+                color: ['#5470c6', '#91cc75', '#fac858', '#ee6666', '#73c0de']
+            };
+
+            myChart.setOption(option, true); // true 代表完全重绘
+        }
+
+        window.addEventListener('resize', () => myChart.resize());
+    </script>
+</body>
+</html>
